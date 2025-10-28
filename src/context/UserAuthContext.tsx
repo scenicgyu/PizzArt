@@ -1,6 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+import { auth, db } from '../lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 interface UserProfile {
   id: string;
@@ -16,7 +23,7 @@ interface UserProfile {
 
 interface UserAuthContextType {
   user: UserProfile | null;
-  authUser: SupabaseUser | null;
+  authUser: FirebaseUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   register: (email: string, password: string, username: string, full_name: string) => Promise<{ success: boolean; error?: string }>;
@@ -29,21 +36,15 @@ const UserAuthContext = createContext<UserAuthContextType | null>(null);
 
 export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [authUser, setAuthUser] = useState<SupabaseUser | null>(null);
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const loadUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .maybeSingle();
+      const userDoc = await getDoc(doc(db, 'users', userId));
 
-      if (error) throw error;
-
-      if (data) {
-        setUser(data);
+      if (userDoc.exists()) {
+        setUser(userDoc.data() as UserProfile);
       }
     } catch (error) {
       console.error('Error loading user profile:', error);
@@ -52,71 +53,46 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
 
   const refreshProfile = async () => {
     if (authUser) {
-      await loadUserProfile(authUser.id);
+      await loadUserProfile(authUser.uid);
     }
   };
 
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-
-        if (authUser) {
-          setAuthUser(authUser);
-          await loadUserProfile(authUser.id);
-        }
-      } catch (error) {
-        console.error('Error initializing auth:', error);
-      } finally {
-        setIsLoading(false);
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        setAuthUser(firebaseUser);
+        await loadUserProfile(firebaseUser.uid);
+      } else {
+        setUser(null);
+        setAuthUser(null);
       }
-    };
+      setIsLoading(false);
+    });
 
-    initAuth();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          setAuthUser(session.user);
-          await loadUserProfile(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setAuthUser(null);
-        } else if (event === 'USER_UPDATED' && session?.user) {
-          await loadUserProfile(session.user.id);
-        }
-      }
-    );
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const register = async (email: string, password: string, username: string, full_name: string) => {
     try {
-      const { data, error } = await supabase.auth.signUp({
+      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      const userId = userCredential.user.uid;
+
+      const userProfile: UserProfile = {
+        id: userId,
         email,
-        password,
-        options: {
-          data: {
-            username,
-            full_name,
-          },
-        },
-      });
+        username,
+        full_name,
+        phone: '',
+        address: '',
+        points: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
 
-      if (error) {
-        return { success: false, error: error.message };
-      }
+      await setDoc(doc(db, 'users', userId), userProfile);
+      await loadUserProfile(userId);
 
-      if (data.user) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        await loadUserProfile(data.user.id);
-        return { success: true };
-      }
-
-      return { success: false, error: 'Registrasi gagal' };
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Terjadi kesalahan saat registrasi' };
     }
@@ -124,29 +100,17 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
 
   const login = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
-
-      if (error) {
-        return { success: false, error: error.message };
-      }
-
-      if (data.user) {
-        setAuthUser(data.user);
-        await loadUserProfile(data.user.id);
-        return { success: true };
-      }
-
-      return { success: false, error: 'Login gagal' };
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      setAuthUser(userCredential.user);
+      await loadUserProfile(userCredential.user.uid);
+      return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Terjadi kesalahan saat login' };
     }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await signOut(auth);
     setUser(null);
     setAuthUser(null);
   };
@@ -157,14 +121,12 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
         return { success: false, error: 'User tidak ditemukan' };
       }
 
-      const { error } = await supabase
-        .from('users')
-        .update({ ...data, updated_at: new Date().toISOString() })
-        .eq('id', authUser.id);
+      await updateDoc(doc(db, 'users', authUser.uid), {
+        ...data,
+        updated_at: new Date().toISOString(),
+      });
 
-      if (error) throw error;
-
-      await loadUserProfile(authUser.id);
+      await loadUserProfile(authUser.uid);
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Gagal memperbarui profil' };

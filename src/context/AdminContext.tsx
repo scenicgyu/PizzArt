@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { supabase } from '../lib/supabase';
-import { User } from '@supabase/supabase-js';
+import { auth, db } from '../lib/firebase';
+import {
+  signInWithEmailAndPassword,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser
+} from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 
 interface AdminUser {
   id: string;
@@ -10,7 +16,7 @@ interface AdminUser {
 
 interface AdminContextType {
   adminUser: AdminUser | null;
-  authUser: User | null;
+  authUser: FirebaseUser | null;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -21,91 +27,72 @@ const AdminContext = createContext<AdminContextType | null>(null);
 
 export const AdminProvider = ({ children }: { children: ReactNode }) => {
   const [adminUser, setAdminUser] = useState<AdminUser | null>(null);
-  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   const checkAdminStatus = async (): Promise<boolean> => {
-    const { data: { user } } = await supabase.auth.getUser();
+    const user = auth.currentUser;
 
     if (!user) {
       return false;
     }
 
-    const { data: adminData } = await supabase
-      .from('admin_users')
-      .select('*')
-      .eq('id', user.id)
-      .maybeSingle();
+    try {
+      const adminDoc = await getDoc(doc(db, 'admin_users', user.uid));
 
-    if (adminData) {
-      setAdminUser(adminData);
-      setAuthUser(user);
-      return true;
+      if (adminDoc.exists()) {
+        setAdminUser(adminDoc.data() as AdminUser);
+        setAuthUser(user);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error checking admin status:', error);
     }
 
     return false;
   };
 
   useEffect(() => {
-    checkAdminStatus().finally(() => setIsLoading(false));
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          const isAdmin = await checkAdminStatus();
-          if (!isAdmin) {
-            await supabase.auth.signOut();
-            setAdminUser(null);
-            setAuthUser(null);
-          }
-        } else if (event === 'SIGNED_OUT') {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const isAdmin = await checkAdminStatus();
+        if (!isAdmin) {
+          await signOut(auth);
           setAdminUser(null);
           setAuthUser(null);
         }
+      } else {
+        setAdminUser(null);
+        setAuthUser(null);
       }
-    );
+      setIsLoading(false);
+    });
 
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    return () => unsubscribe();
   }, []);
 
   const login = async (email: string, password: string) => {
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const user = userCredential.user;
 
-      if (error) {
-        return { success: false, error: error.message };
+      const adminDoc = await getDoc(doc(db, 'admin_users', user.uid));
+
+      if (!adminDoc.exists()) {
+        await signOut(auth);
+        return { success: false, error: 'Akun ini bukan admin' };
       }
 
-      if (data.user) {
-        const { data: adminData, error: adminError } = await supabase
-          .from('admin_users')
-          .select('*')
-          .eq('id', data.user.id)
-          .maybeSingle();
-
-        if (adminError || !adminData) {
-          await supabase.auth.signOut();
-          return { success: false, error: 'Akun ini bukan admin' };
-        }
-
-        setAdminUser(adminData);
-        setAuthUser(data.user);
-        return { success: true };
-      }
-
-      return { success: false, error: 'Login gagal' };
-    } catch (err) {
-      return { success: false, error: 'Terjadi kesalahan saat login' };
+      setAdminUser(adminDoc.data() as AdminUser);
+      setAuthUser(user);
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Terjadi kesalahan saat login' };
     }
   };
 
   const logout = async () => {
-    await supabase.auth.signOut();
+    await signOut(auth);
     setAdminUser(null);
     setAuthUser(null);
   };
