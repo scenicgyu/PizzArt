@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/firebase';
+import { collection, query, orderBy, getDocs, doc, updateDoc, deleteDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import {
   Package,
   Plus,
@@ -51,14 +52,10 @@ const AdminInventoryPage = () => {
 
   const loadInventory = async () => {
     try {
-      const { data, error } = await supabase
-        .from('inventory')
-        .select('*')
-        .order('category', { ascending: true })
-        .order('name', { ascending: true });
-
-      if (error) throw error;
-      setInventory(data || []);
+      const inventoryQuery = query(collection(db, 'inventory'), orderBy('category'), orderBy('name'));
+      const snapshot = await getDocs(inventoryQuery);
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InventoryItem));
+      setInventory(data);
     } catch (error) {
       console.error('Error loading inventory:', error);
     } finally {
@@ -84,12 +81,10 @@ const AdminInventoryPage = () => {
 
   const toggleAvailability = async (id: string, currentStatus: boolean) => {
     try {
-      const { error } = await supabase
-        .from('inventory')
-        .update({ is_available: !currentStatus, updated_at: new Date().toISOString() })
-        .eq('id', id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, 'inventory', id), {
+        is_available: !currentStatus,
+        updated_at: serverTimestamp()
+      });
       await loadInventory();
     } catch (error) {
       console.error('Error toggling availability:', error);
@@ -101,16 +96,16 @@ const AdminInventoryPage = () => {
 
     try {
       if (editingItem) {
-        const { error } = await supabase
-          .from('inventory')
-          .update({ ...formData, updated_at: new Date().toISOString() })
-          .eq('id', editingItem.id);
-
-        if (error) throw error;
+        await updateDoc(doc(db, 'inventory', editingItem.id), {
+          ...formData,
+          updated_at: serverTimestamp()
+        });
       } else {
-        const { error } = await supabase.from('inventory').insert([formData]);
-
-        if (error) throw error;
+        await addDoc(collection(db, 'inventory'), {
+          ...formData,
+          created_at: serverTimestamp(),
+          updated_at: serverTimestamp()
+        });
       }
 
       await loadInventory();
@@ -125,9 +120,7 @@ const AdminInventoryPage = () => {
     if (!confirm('Apakah Anda yakin ingin menghapus item ini?')) return;
 
     try {
-      const { error } = await supabase.from('inventory').delete().eq('id', id);
-
-      if (error) throw error;
+      await deleteDoc(doc(db, 'inventory', id));
       await loadInventory();
     } catch (error) {
       console.error('Error deleting inventory item:', error);

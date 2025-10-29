@@ -16,7 +16,8 @@ import {
   AlertCircle,
   CheckCircle,
 } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 
 interface Order {
   id: string;
@@ -63,15 +64,33 @@ const MyProfilePage = () => {
     if (!authUser) return;
 
     try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false })
-        .limit(5);
+      const ordersQuery = query(
+        collection(db, 'orders'),
+        where('user_id', '==', authUser.uid),
+        orderBy('created_at', 'desc'),
+        limit(5)
+      );
 
-      if (error) throw error;
-      setOrders(data || []);
+      const ordersSnapshot = await getDocs(ordersQuery);
+
+      const ordersData = await Promise.all(
+        ordersSnapshot.docs.map(async (doc) => {
+          const orderData = { id: doc.id, ...doc.data() } as Order;
+
+          const itemsQuery = query(
+            collection(db, 'order_items'),
+            where('order_id', '==', doc.id)
+          );
+          const itemsSnapshot = await getDocs(itemsQuery);
+          orderData.order_items = itemsSnapshot.docs.map(itemDoc => ({
+            ...itemDoc.data()
+          }));
+
+          return orderData;
+        })
+      );
+
+      setOrders(ordersData);
     } catch (error) {
       console.error('Error loading orders:', error);
     } finally {

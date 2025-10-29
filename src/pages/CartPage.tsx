@@ -2,10 +2,13 @@ import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Trash2, Plus, Minus, ShoppingBag, ArrowLeft } from 'lucide-react';
 import { useApp } from '../context/AppContext';
-import { supabase } from '../lib/supabase';
+import { useUserAuth } from '../context/UserAuthContext';
+import { db } from '../lib/firebase';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 
 const CartPage = () => {
   const { state, dispatch } = useApp();
+  const { authUser } = useUserAuth();
   const [isProcessing, setIsProcessing] = useState(false);
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
@@ -29,9 +32,7 @@ const CartPage = () => {
     setIsProcessing(true);
 
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-
-      if (!user) {
+      if (!authUser) {
         alert('Silakan login terlebih dahulu untuk melakukan checkout');
         setIsProcessing(false);
         return;
@@ -39,24 +40,18 @@ const CartPage = () => {
 
       const finalTotal = Math.floor(totalPrice * 1.1);
 
-      const { data: order, error: orderError } = await supabase
-        .from('orders')
-        .insert([
-          {
-            user_id: user.id,
-            user_email: user.email || state.user?.email || 'guest@pizza.com',
-            user_name: state.user?.username || 'Guest',
-            total_price: finalTotal,
-            status: 'pending',
-          },
-        ])
-        .select()
-        .single();
-
-      if (orderError) throw orderError;
+      const orderRef = await addDoc(collection(db, 'orders'), {
+        user_id: authUser.uid,
+        user_email: authUser.email || state.user?.email || 'guest@pizza.com',
+        user_name: state.user?.username || 'Guest',
+        total_price: finalTotal,
+        status: 'pending',
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+      });
 
       const orderItems = state.cart.map((item) => ({
-        order_id: order.id,
+        order_id: orderRef.id,
         pizza_name: item.pizza.name,
         size: item.pizza.size,
         crust: item.pizza.crust,
@@ -64,16 +59,15 @@ const CartPage = () => {
         toppings: item.pizza.toppings,
         quantity: item.quantity,
         price: item.pizza.price * item.quantity,
+        created_at: serverTimestamp(),
       }));
 
-      const { error: itemsError } = await supabase
-        .from('order_items')
-        .insert(orderItems);
-
-      if (itemsError) throw itemsError;
+      for (const item of orderItems) {
+        await addDoc(collection(db, 'order_items'), item);
+      }
 
       dispatch({ type: 'ADD_POINTS', payload: Math.floor(totalPrice / 1000) });
-      alert(`🎉 Pesanan berhasil dibuat!\nID Pesanan: ${order.id.slice(0, 8)}\nTotal: Rp ${finalTotal.toLocaleString()}\n+${Math.floor(totalPrice / 1000)} poin telah ditambahkan ke akun kamu!`);
+      alert(`🎉 Pesanan berhasil dibuat!\nID Pesanan: ${orderRef.id.slice(0, 8)}\nTotal: Rp ${finalTotal.toLocaleString()}\n+${Math.floor(totalPrice / 1000)} poin telah ditambahkan ke akun kamu!`);
       dispatch({ type: 'CLEAR_CART' });
     } catch (error) {
       console.error('Error creating order:', error);

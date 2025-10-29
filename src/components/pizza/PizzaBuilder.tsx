@@ -3,7 +3,8 @@ import { Plus, Minus, Sparkles } from 'lucide-react';
 import { Pizza, Topping } from '../../types';
 import { baseSauces, crustTypes, pizzaSizes } from '../../data/toppings';
 import PizzaPreview from './PizzaPreview';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 
 interface PizzaBuilderProps {
   onPizzaComplete: (pizza: Pizza) => void;
@@ -26,14 +27,11 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
 
   const loadInventory = async () => {
     try {
-      const { data: inventory, error } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('is_available', true);
+      const inventoryQuery = query(collection(db, 'inventory'), where('is_available', '==', true));
+      const inventorySnapshot = await getDocs(inventoryQuery);
+      const inventory = inventorySnapshot.docs.map(doc => doc.data());
 
-      if (error) throw error;
-
-      const inventoryMap = new Map(inventory?.map(item => [item.name.toLowerCase(), item]) || []);
+      const inventoryMap = new Map(inventory.map(item => [item.name.toLowerCase(), item]));
 
       const toppingCategories: Record<string, string> = {
         'pepperoni': 'meat',

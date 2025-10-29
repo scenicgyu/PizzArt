@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/firebase';
+import { collection, query, orderBy, getDocs, where, doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
 import {
   ShoppingBag,
   Clock,
@@ -42,42 +43,38 @@ const AdminOrdersPage = () => {
   const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
 
   useEffect(() => {
-    loadOrders();
-    const channel = supabase
-      .channel('orders_changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          loadOrders();
-        }
-      )
-      .subscribe();
+    const ordersQuery = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const unsubscribe = onSnapshot(ordersQuery, async (snapshot) => {
+      const ordersData = await Promise.all(
+        snapshot.docs.map(async (docSnap) => {
+          const orderData = { id: docSnap.id, ...docSnap.data() } as Order;
+
+          const itemsQuery = query(collection(db, 'order_items'), where('order_id', '==', docSnap.id));
+          const itemsSnapshot = await getDocs(itemsQuery);
+          orderData.order_items = itemsSnapshot.docs.map(itemDoc => ({
+            id: itemDoc.id,
+            ...itemDoc.data()
+          } as OrderItem));
+
+          return orderData;
+        })
+      );
+
+      setOrders(ordersData);
+      setIsLoading(false);
+    }, (error) => {
+      console.error('Error loading orders:', error);
+      setIsLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
     filterOrders();
   }, [orders, searchTerm, statusFilter]);
 
-  const loadOrders = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const filterOrders = () => {
     let filtered = orders;
@@ -100,13 +97,10 @@ const AdminOrdersPage = () => {
 
   const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
     try {
-      const { error } = await supabase
-        .from('orders')
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq('id', orderId);
-
-      if (error) throw error;
-      await loadOrders();
+      await updateDoc(doc(db, 'orders', orderId), {
+        status: newStatus,
+        updated_at: serverTimestamp()
+      });
     } catch (error) {
       console.error('Error updating order status:', error);
     }

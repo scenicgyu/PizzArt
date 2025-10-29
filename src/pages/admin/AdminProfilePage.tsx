@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { useAdmin } from '../../context/AdminContext';
-import { supabase } from '../../lib/supabase';
+import { auth, db } from '../../lib/firebase';
+import { updatePassword } from 'firebase/auth';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { User, Mail, Lock, Save, AlertCircle, CheckCircle } from 'lucide-react';
 
 const AdminProfilePage = () => {
@@ -24,12 +26,10 @@ const AdminProfilePage = () => {
     try {
       if (!adminUser) throw new Error('Admin user not found');
 
-      const { error } = await supabase
-        .from('admin_users')
-        .update({ username, updated_at: new Date().toISOString() })
-        .eq('id', adminUser.id);
-
-      if (error) throw error;
+      await updateDoc(doc(db, 'admin_users', adminUser.id), {
+        username,
+        updated_at: serverTimestamp()
+      });
 
       setMessage({ type: 'success', text: 'Profil berhasil diperbarui' });
       setIsEditing(false);
@@ -57,11 +57,10 @@ const AdminProfilePage = () => {
     setIsLoading(true);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword,
-      });
+      const user = auth.currentUser;
+      if (!user) throw new Error('User not authenticated');
 
-      if (error) throw error;
+      await updatePassword(user, newPassword);
 
       setMessage({ type: 'success', text: 'Password berhasil diubah' });
       setCurrentPassword('');

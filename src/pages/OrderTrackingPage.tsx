@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useUserAuth } from '../context/UserAuthContext';
-import { supabase } from '../lib/supabase';
+import { db } from '../lib/firebase';
+import { collection, query, where, orderBy, getDocs, onSnapshot } from 'firebase/firestore';
 import {
   Package,
   Clock,
@@ -50,48 +51,41 @@ const OrderTrackingPage = () => {
 
   useEffect(() => {
     if (authUser) {
-      loadOrders();
+      const ordersQuery = query(
+        collection(db, 'orders'),
+        where('user_id', '==', authUser.uid),
+        orderBy('created_at', 'desc')
+      );
 
-      const channel = supabase
-        .channel('order_tracking')
-        .on(
-          'postgres_changes',
-          {
-            event: '*',
-            schema: 'public',
-            table: 'orders',
-            filter: `user_id=eq.${authUser.id}`,
-          },
-          () => {
-            loadOrders();
-          }
-        )
-        .subscribe();
+      const unsubscribe = onSnapshot(ordersQuery, async (snapshot) => {
+        const ordersData = await Promise.all(
+          snapshot.docs.map(async (doc) => {
+            const orderData = { id: doc.id, ...doc.data() } as Order;
 
-      return () => {
-        supabase.removeChannel(channel);
-      };
+            const itemsQuery = query(
+              collection(db, 'order_items'),
+              where('order_id', '==', doc.id)
+            );
+            const itemsSnapshot = await getDocs(itemsQuery);
+            orderData.order_items = itemsSnapshot.docs.map(itemDoc => ({
+              id: itemDoc.id,
+              ...itemDoc.data()
+            } as OrderItem));
+
+            return orderData;
+          })
+        );
+
+        setOrders(ordersData);
+        setIsLoading(false);
+      }, (error) => {
+        console.error('Error loading orders:', error);
+        setIsLoading(false);
+      });
+
+      return () => unsubscribe();
     }
   }, [authUser]);
-
-  const loadOrders = async () => {
-    if (!authUser) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .eq('user_id', authUser.id)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setOrders(data || []);
-    } catch (error) {
-      console.error('Error loading orders:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

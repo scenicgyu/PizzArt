@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
-import { supabase } from '../../lib/supabase';
+import { db } from '../../lib/firebase';
+import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import {
   TrendingUp,
   ShoppingBag,
@@ -49,15 +50,25 @@ const AdminDashboardPage = () => {
 
   const loadDashboardData = async () => {
     try {
-      const { data: orders } = await supabase
-        .from('orders')
-        .select('*, order_items(*)')
-        .order('created_at', { ascending: false });
+      const ordersQuery = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
+      const ordersSnapshot = await getDocs(ordersQuery);
 
-      const { data: inventory } = await supabase
-        .from('inventory')
-        .select('*')
-        .lt('stock_quantity', supabase.raw('low_stock_threshold'));
+      const orders = await Promise.all(
+        ordersSnapshot.docs.map(async (doc) => {
+          const orderData = { id: doc.id, ...doc.data() };
+
+          const itemsQuery = query(collection(db, 'order_items'), where('order_id', '==', doc.id));
+          const itemsSnapshot = await getDocs(itemsQuery);
+          orderData.order_items = itemsSnapshot.docs.map(itemDoc => itemDoc.data());
+
+          return orderData;
+        })
+      );
+
+      const inventorySnapshot = await getDocs(collection(db, 'inventory'));
+      const inventory = inventorySnapshot.docs
+        .map(doc => doc.data())
+        .filter((item: any) => item.stock_quantity < item.low_stock_threshold);
 
       if (orders) {
         const today = new Date();
