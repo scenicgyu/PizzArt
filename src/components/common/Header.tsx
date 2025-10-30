@@ -1,13 +1,17 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Pizza, User, ShoppingCart, Trophy, Users, LogOut } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
+import { useUserAuth } from '../../context/UserAuthContext';
 
 const Header = () => {
-  const { state, dispatch } = useApp();
+  const { state } = useApp();
+  const { user, authUser, logout } = useUserAuth();
+  const navigate = useNavigate();
 
-  const handleLogout = () => {
-    dispatch({ type: 'LOGOUT' });
+  const handleLogout = async () => {
+    await logout();
+    navigate('/');
   };
 
   const cartItemsCount = state.cart.reduce((total, item) => total + item.quantity, 0);
@@ -28,22 +32,22 @@ const Header = () => {
 
           {/* Navigation */}
           <nav className="hidden md:flex items-center space-x-6">
-            <Link 
-              to="/order" 
+            <Link
+              to="/order"
               className="text-white hover:text-yellow-300 transition-colors font-medium flex items-center space-x-1"
             >
               <Pizza size={18} />
               <span>Create Pizza</span>
             </Link>
-            <Link 
-              to="/community" 
+            <Link
+              to="/community"
               className="text-white hover:text-yellow-300 transition-colors font-medium flex items-center space-x-1"
             >
               <Users size={18} />
               <span>Community</span>
             </Link>
-            <Link 
-              to="/contests" 
+            <Link
+              to="/contests"
               className="text-white hover:text-yellow-300 transition-colors font-medium flex items-center space-x-1"
             >
               <Trophy size={18} />
@@ -53,17 +57,17 @@ const Header = () => {
 
           {/* User Actions */}
           <div className="flex items-center space-x-4">
-            {state.isAuthenticated ? (
+            {authUser && user ? (
               <>
                 {/* Points */}
                 <div className="hidden md:flex items-center bg-yellow-400 text-yellow-900 px-3 py-1 rounded-full font-semibold">
                   <Trophy size={16} className="mr-1" />
-                  {state.user?.points || 0}
+                  {user.points || 0}
                 </div>
-                
+
                 {/* Cart */}
-                <Link 
-                  to="/cart" 
+                <Link
+                  to="/cart"
                   className="relative bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all"
                 >
                   <ShoppingCart className="text-white" size={20} />
@@ -75,8 +79,8 @@ const Header = () => {
                 </Link>
 
                 {/* Profile */}
-                <Link 
-                  to="/profile" 
+                <Link
+                  to="/my-profile"
                   className="bg-white bg-opacity-20 p-2 rounded-full hover:bg-opacity-30 transition-all"
                 >
                   <User className="text-white" size={20} />
@@ -93,7 +97,7 @@ const Header = () => {
               </>
             ) : (
               <div className="flex items-center space-x-2">
-                <Link 
+                <Link
                   to="/login"
                   className="bg-white text-red-600 px-4 py-2 rounded-full font-semibold hover:bg-yellow-300 transition-colors"
                 >
