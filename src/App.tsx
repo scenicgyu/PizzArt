@@ -5,6 +5,7 @@ import { AdminProvider } from './context/AdminContext';
 import { UserAuthProvider } from './context/UserAuthContext';
 import Header from './components/common/Header';
 import Footer from './components/common/Footer';
+import ProtectedRoute from './components/common/ProtectedRoute';
 import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
@@ -81,13 +82,55 @@ function App() {
                         <Route path="/" element={<HomePage />} />
                         <Route path="/login" element={<LoginPage />} />
                         <Route path="/register" element={<RegisterPage />} />
-                        <Route path="/order" element={<OrderPage />} />
-                        <Route path="/community" element={<CommunityPage />} />
-                        <Route path="/contests" element={<ContestPage />} />
-                        <Route path="/cart" element={<CartPage />} />
+                        <Route
+                          path="/order"
+                          element={
+                            <ProtectedRoute>
+                              <OrderPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/community"
+                          element={
+                            <ProtectedRoute>
+                              <CommunityPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/contests"
+                          element={
+                            <ProtectedRoute>
+                              <ContestPage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/cart"
+                          element={
+                            <ProtectedRoute>
+                              <CartPage />
+                            </ProtectedRoute>
+                          }
+                        />
                         <Route path="/profile" element={<ProfilePage />} />
-                        <Route path="/my-profile" element={<MyProfilePage />} />
-                        <Route path="/orders" element={<OrderTrackingPage />} />
+                        <Route
+                          path="/my-profile"
+                          element={
+                            <ProtectedRoute>
+                              <MyProfilePage />
+                            </ProtectedRoute>
+                          }
+                        />
+                        <Route
+                          path="/orders"
+                          element={
+                            <ProtectedRoute>
+                              <OrderTrackingPage />
+                            </ProtectedRoute>
+                          }
+                        />
                       </Routes>
                     </main>
                     <Footer />

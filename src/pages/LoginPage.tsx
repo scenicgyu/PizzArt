@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { Pizza, Mail, Lock, Eye, EyeOff, AlertCircle, CheckCircle } from 'lucide-react';
 import { useUserAuth } from '../context/UserAuthContext';
 
@@ -11,6 +11,7 @@ const LoginPage = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const { login } = useUserAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,7 +22,8 @@ const LoginPage = () => {
 
     if (result.success) {
       setMessage({ type: 'success', text: 'Login berhasil!' });
-      setTimeout(() => navigate('/'), 500);
+      const from = (location.state as any)?.from || '/';
+      setTimeout(() => navigate(from), 500);
     } else {
       setMessage({ type: 'error', text: result.error || 'Login gagal' });
     }
