@@ -39,21 +39,55 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   const [authUser, setAuthUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const loadUserProfile = async (userId: string) => {
+  const loadUserProfile = async (userId: string, firebaseUser?: any) => {
     try {
       const userDoc = await getDoc(doc(db, 'users', userId));
 
       if (userDoc.exists()) {
         setUser(userDoc.data() as UserProfile);
+      } else {
+        console.warn('User document does not exist in Firestore');
+        if (firebaseUser) {
+          const minimalProfile: UserProfile = {
+            id: userId,
+            email: firebaseUser.email || '',
+            username: firebaseUser.email?.split('@')[0] || 'user',
+            full_name: firebaseUser.displayName || '',
+            phone: '',
+            address: '',
+            points: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          setUser(minimalProfile);
+          console.log('Created minimal user profile from auth');
+        }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading user profile:', error);
+      if (error.code === 'permission-denied') {
+        console.warn('Permission denied - Security Rules may not be configured properly');
+        if (firebaseUser) {
+          const minimalProfile: UserProfile = {
+            id: userId,
+            email: firebaseUser.email || '',
+            username: firebaseUser.email?.split('@')[0] || 'user',
+            full_name: firebaseUser.displayName || '',
+            phone: '',
+            address: '',
+            points: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          setUser(minimalProfile);
+        }
+      }
     }
   };
 
   const refreshProfile = async () => {
     if (authUser) {
-      await loadUserProfile(authUser.uid);
+      await loadUserProfile(authUser.uid, authUser);
     }
   };
 
@@ -61,7 +95,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setAuthUser(firebaseUser);
-        await loadUserProfile(firebaseUser.uid);
+        await loadUserProfile(firebaseUser.uid, firebaseUser);
       } else {
         setUser(null);
         setAuthUser(null);
@@ -102,7 +136,7 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       setAuthUser(userCredential.user);
-      await loadUserProfile(userCredential.user.uid);
+      await loadUserProfile(userCredential.user.uid, userCredential.user);
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Terjadi kesalahan saat login' };
