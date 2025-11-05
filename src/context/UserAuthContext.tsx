@@ -46,42 +46,12 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
       if (userDoc.exists()) {
         setUser(userDoc.data() as UserProfile);
       } else {
-        console.warn('User document does not exist in Firestore');
-        if (firebaseUser) {
-          const minimalProfile: UserProfile = {
-            id: userId,
-            email: firebaseUser.email || '',
-            username: firebaseUser.email?.split('@')[0] || 'user',
-            full_name: firebaseUser.displayName || '',
-            phone: '',
-            address: '',
-            points: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          setUser(minimalProfile);
-          console.log('Created minimal user profile from auth');
-        }
+        console.error('User not found in users collection - possibly an admin account');
+        setUser(null);
       }
     } catch (error: any) {
       console.error('Error loading user profile:', error);
-      if (error.code === 'permission-denied') {
-        console.warn('Permission denied - Security Rules may not be configured properly');
-        if (firebaseUser) {
-          const minimalProfile: UserProfile = {
-            id: userId,
-            email: firebaseUser.email || '',
-            username: firebaseUser.email?.split('@')[0] || 'user',
-            full_name: firebaseUser.displayName || '',
-            phone: '',
-            address: '',
-            points: 0,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          setUser(minimalProfile);
-        }
-      }
+      setUser(null);
     }
   };
 
@@ -135,8 +105,16 @@ export const UserAuthProvider = ({ children }: { children: ReactNode }) => {
   const login = async (email: string, password: string) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
+
+      const userDoc = await getDoc(doc(db, 'users', userCredential.user.uid));
+
+      if (!userDoc.exists()) {
+        await signOut(auth);
+        return { success: false, error: 'Akun ini bukan user biasa. Silakan login melalui laman admin.' };
+      }
+
       setAuthUser(userCredential.user);
-      await loadUserProfile(userCredential.user.uid, userCredential.user);
+      setUser(userDoc.data() as UserProfile);
       return { success: true };
     } catch (err: any) {
       return { success: false, error: err.message || 'Terjadi kesalahan saat login' };
