@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
+import RealtimeRevenue from '../../components/admin/RealtimeRevenue';
 import { db } from '../../lib/firebase';
 import { collection, query, orderBy, getDocs, where } from 'firebase/firestore';
 import {
@@ -190,6 +191,8 @@ const AdminDashboardPage = () => {
           <h1 className="text-3xl font-bold text-slate-900">Dashboard</h1>
           <p className="text-slate-600 mt-1">Ringkasan statistik dan aktivitas sistem</p>
         </div>
+
+        <RealtimeRevenue />
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {statCards.map((card) => {

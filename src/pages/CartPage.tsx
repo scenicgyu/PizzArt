@@ -5,11 +5,14 @@ import { useApp } from '../context/AppContext';
 import { useUserAuth } from '../context/UserAuthContext';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import QRISPayment from '../components/payment/QRISPayment';
 
 const CartPage = () => {
   const { state, dispatch } = useApp();
-  const { authUser } = useUserAuth();
+  const { authUser, user } = useUserAuth();
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showQRIS, setShowQRIS] = useState(false);
+  const [currentOrderId, setCurrentOrderId] = useState<string | null>(null);
 
   const updateQuantity = (itemId: string, newQuantity: number) => {
     if (newQuantity <= 0) {
@@ -66,15 +69,27 @@ const CartPage = () => {
         await addDoc(collection(db, 'order_items'), item);
       }
 
-      dispatch({ type: 'ADD_POINTS', payload: Math.floor(totalPrice / 1000) });
-      alert(`🎉 Pesanan berhasil dibuat!\nID Pesanan: ${orderRef.id.slice(0, 8)}\nTotal: Rp ${finalTotal.toLocaleString()}\n+${Math.floor(totalPrice / 1000)} poin telah ditambahkan ke akun kamu!`);
-      dispatch({ type: 'CLEAR_CART' });
+      setCurrentOrderId(orderRef.id);
+      setShowQRIS(true);
+      setIsProcessing(false);
     } catch (error) {
       console.error('Error creating order:', error);
       alert('Terjadi kesalahan saat membuat pesanan. Silakan coba lagi.');
-    } finally {
       setIsProcessing(false);
     }
+  };
+
+  const handlePaymentSuccess = () => {
+    dispatch({ type: 'ADD_POINTS', payload: Math.floor(totalPrice / 1000) });
+    dispatch({ type: 'CLEAR_CART' });
+    setShowQRIS(false);
+    alert('Pembayaran berhasil! Pesanan Anda sedang diproses.');
+    window.location.href = '/orders';
+  };
+
+  const handlePaymentCancel = () => {
+    setShowQRIS(false);
+    setCurrentOrderId(null);
   };
 
   return (
@@ -232,6 +247,17 @@ const CartPage = () => {
           </div>
         )}
       </div>
+
+      {showQRIS && currentOrderId && user && (
+        <QRISPayment
+          orderId={currentOrderId}
+          amount={Math.floor(totalPrice * 1.1)}
+          customerEmail={user.email}
+          customerName={user.username}
+          onSuccess={handlePaymentSuccess}
+          onCancel={handlePaymentCancel}
+        />
+      )}
     </div>
   );
 };
