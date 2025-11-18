@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Sparkles } from 'lucide-react';
 import { Pizza, Topping } from '../../types';
-import { baseSauces, crustTypes, pizzaSizes } from '../../data/toppings';
+import { baseSauces, crustTypes, pizzaSizes, availableToppings } from '../../data/toppings';
 import PizzaPreview from './PizzaPreview';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -31,39 +31,33 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
       const inventorySnapshot = await getDocs(inventoryQuery);
       const inventory = inventorySnapshot.docs.map(doc => doc.data());
 
-      const inventoryMap = new Map(inventory.map(item => [item.name.toLowerCase(), item]));
+      console.log('Available inventory items:', inventory);
 
-      const toppingNameMap: Record<string, {category: string; image: string; price: number}> = {
-        'pepperoni': { category: 'meat', image: '🍕', price: 15000 },
-        'italian sausage': { category: 'meat', image: '🌭', price: 18000 },
-        'bacon': { category: 'meat', image: '🥓', price: 20000 },
-        'chicken': { category: 'meat', image: '🍗', price: 22000 },
-        'ham': { category: 'meat', image: '🍖', price: 17000 },
-        'mushrooms': { category: 'vegetable', image: '🍄', price: 12000 },
-        'bell peppers': { category: 'vegetable', image: '🫑', price: 10000 },
-        'onions': { category: 'vegetable', image: '🧅', price: 8000 },
-        'tomatoes': { category: 'vegetable', image: '🍅', price: 12000 },
-        'olives': { category: 'vegetable', image: '🫒', price: 15000 },
-        'spinach': { category: 'vegetable', image: '🥬', price: 10000 },
-        'mozzarella cheese': { category: 'cheese', image: '🧀', price: 18000 },
-        'parmesan cheese': { category: 'cheese', image: '🧀', price: 20000 },
-        'cheddar cheese': { category: 'cheese', image: '🧀', price: 16000 },
-      };
+      const inventoryNames = new Set(inventory.map(item => item.name.toLowerCase()));
 
       const toppingsFromInventory: Topping[] = [];
-      Object.entries(toppingNameMap).forEach(([name, data]) => {
-        if (inventoryMap.has(name)) {
-          toppingsFromInventory.push({
-            id: name.replace(/\s+/g, '-'),
-            name: name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-            category: data.category as any,
-            price: data.price,
-            image: data.image,
-          });
+
+      availableToppings.forEach(topping => {
+        const toppingNameLower = topping.name.toLowerCase();
+        const found = Array.from(inventoryNames).some(name =>
+          name.includes(toppingNameLower.split(' ')[0]) ||
+          toppingNameLower.includes(name)
+        );
+
+        if (found || inventoryNames.has(topping.name.toLowerCase())) {
+          toppingsFromInventory.push(topping);
         }
       });
 
-      setAvailableToppings(toppingsFromInventory);
+      console.log('Inventory items found:', inventoryNames);
+      console.log('Toppings matched from inventory:', toppingsFromInventory);
+
+      if (toppingsFromInventory.length > 0) {
+        setAvailableToppings(toppingsFromInventory);
+      } else {
+        console.log('No inventory items matched, using all available toppings as fallback');
+        setAvailableToppings(availableToppings);
+      }
 
       const crustsFromInventory = crustTypes.filter(crust => {
         const variations = [
