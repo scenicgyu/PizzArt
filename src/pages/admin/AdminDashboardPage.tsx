@@ -58,9 +58,14 @@ const AdminDashboardPage = () => {
         ordersSnapshot.docs.map(async (doc) => {
           const orderData = { id: doc.id, ...doc.data() };
 
-          const itemsQuery = query(collection(db, 'order_items'), where('order_id', '==', doc.id));
-          const itemsSnapshot = await getDocs(itemsQuery);
-          orderData.order_items = itemsSnapshot.docs.map(itemDoc => itemDoc.data());
+          try {
+            const itemsQuery = query(collection(db, 'order_items'), where('order_id', '==', doc.id));
+            const itemsSnapshot = await getDocs(itemsQuery);
+            orderData.order_items = itemsSnapshot.docs.map(itemDoc => itemDoc.data());
+          } catch (err) {
+            console.warn('Error loading order items for order', doc.id);
+            orderData.order_items = [];
+          }
 
           return orderData;
         })
@@ -69,50 +74,61 @@ const AdminDashboardPage = () => {
       const inventorySnapshot = await getDocs(collection(db, 'inventory'));
       const inventory = inventorySnapshot.docs
         .map(doc => doc.data())
-        .filter((item: any) => item.stock_quantity < item.low_stock_threshold);
+        .filter((item: any) => item.stock_quantity < (item.low_stock_threshold || 10));
 
-      if (orders) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
 
-        const totalRevenue = orders.reduce((sum, order) => sum + Number(order.total_price), 0);
-        const pendingOrders = orders.filter((o) => o.status === 'pending').length;
-        const processingOrders = orders.filter((o) => o.status === 'processing').length;
-        const completedOrders = orders.filter((o) => o.status === 'completed').length;
-        const todayOrders = orders.filter((o) => {
-          const orderDate = new Date(o.created_at);
-          orderDate.setHours(0, 0, 0, 0);
-          return orderDate.getTime() === today.getTime();
-        }).length;
+      const totalRevenue = orders.reduce((sum, order) => {
+        const price = order.total_price || order.totalPrice || 0;
+        return sum + Number(price);
+      }, 0);
+      const pendingOrders = orders.filter((o) => o.status === 'pending').length;
+      const processingOrders = orders.filter((o) => o.status === 'processing').length;
+      const completedOrders = orders.filter((o) => o.status === 'completed').length;
+      const todayOrders = orders.filter((o) => {
+        if (!o.created_at) return false;
+        const orderDate = new Date(o.created_at);
+        orderDate.setHours(0, 0, 0, 0);
+        return orderDate.getTime() === today.getTime();
+      }).length;
 
-        setStats({
-          totalOrders: orders.length,
-          pendingOrders,
-          totalRevenue,
-          lowStockItems: inventory?.length || 0,
-          todayOrders,
-          processingOrders,
-          completedOrders,
+      setStats({
+        totalOrders: orders.length,
+        pendingOrders,
+        totalRevenue,
+        lowStockItems: inventory?.length || 0,
+        todayOrders,
+        processingOrders,
+        completedOrders,
+      });
+
+      const pizzaCounts: Record<string, number> = {};
+      orders.forEach((order) => {
+        order.order_items?.forEach((item: any) => {
+          const name = item.pizza_name || 'Pizza';
+          pizzaCounts[name] = (pizzaCounts[name] || 0) + (item.quantity || 1);
         });
+      });
 
-        const pizzaCounts: Record<string, number> = {};
-        orders.forEach((order) => {
-          order.order_items?.forEach((item: any) => {
-            const name = item.pizza_name;
-            pizzaCounts[name] = (pizzaCounts[name] || 0) + item.quantity;
-          });
-        });
+      const popular = Object.entries(pizzaCounts)
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5);
 
-        const popular = Object.entries(pizzaCounts)
-          .map(([name, count]) => ({ name, count }))
-          .sort((a, b) => b.count - a.count)
-          .slice(0, 5);
-
-        setPopularPizzas(popular);
-        setRecentOrders(orders.slice(0, 5));
-      }
+      setPopularPizzas(popular);
+      setRecentOrders(orders.slice(0, 5));
     } catch (error) {
       console.error('Error loading dashboard data:', error);
+      setStats({
+        totalOrders: 0,
+        pendingOrders: 0,
+        totalRevenue: 0,
+        lowStockItems: 0,
+        todayOrders: 0,
+        processingOrders: 0,
+        completedOrders: 0,
+      });
     } finally {
       setIsLoading(false);
     }

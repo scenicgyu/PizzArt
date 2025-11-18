@@ -33,66 +33,32 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
 
       const inventoryMap = new Map(inventory.map(item => [item.name.toLowerCase(), item]));
 
-      const toppingCategories: Record<string, string> = {
-        'pepperoni': 'meat',
-        'italian sausage': 'meat',
-        'bacon': 'meat',
-        'chicken': 'meat',
-        'ham': 'meat',
-        'mushrooms': 'vegetable',
-        'bell peppers': 'vegetable',
-        'onions': 'vegetable',
-        'tomatoes': 'vegetable',
-        'olives': 'vegetable',
-        'spinach': 'vegetable',
-        'mozzarella cheese': 'cheese',
-        'parmesan cheese': 'cheese',
-        'cheddar cheese': 'cheese',
-      };
-
-      const toppingImages: Record<string, string> = {
-        'pepperoni': '🍕',
-        'italian sausage': '🌭',
-        'bacon': '🥓',
-        'chicken': '🍗',
-        'ham': '🍖',
-        'mushrooms': '🍄',
-        'bell peppers': '🫑',
-        'onions': '🧅',
-        'tomatoes': '🍅',
-        'olives': '🫒',
-        'spinach': '🥬',
-        'mozzarella cheese': '🧀',
-        'parmesan cheese': '🧀',
-        'cheddar cheese': '🧀',
-      };
-
-      const toppingPrices: Record<string, number> = {
-        'pepperoni': 15000,
-        'italian sausage': 18000,
-        'bacon': 20000,
-        'chicken': 22000,
-        'ham': 17000,
-        'mushrooms': 12000,
-        'bell peppers': 10000,
-        'onions': 8000,
-        'tomatoes': 12000,
-        'olives': 15000,
-        'spinach': 10000,
-        'mozzarella cheese': 18000,
-        'parmesan cheese': 20000,
-        'cheddar cheese': 16000,
+      const toppingNameMap: Record<string, {category: string; image: string; price: number}> = {
+        'pepperoni': { category: 'meat', image: '🍕', price: 15000 },
+        'italian sausage': { category: 'meat', image: '🌭', price: 18000 },
+        'bacon': { category: 'meat', image: '🥓', price: 20000 },
+        'chicken': { category: 'meat', image: '🍗', price: 22000 },
+        'ham': { category: 'meat', image: '🍖', price: 17000 },
+        'mushrooms': { category: 'vegetable', image: '🍄', price: 12000 },
+        'bell peppers': { category: 'vegetable', image: '🫑', price: 10000 },
+        'onions': { category: 'vegetable', image: '🧅', price: 8000 },
+        'tomatoes': { category: 'vegetable', image: '🍅', price: 12000 },
+        'olives': { category: 'vegetable', image: '🫒', price: 15000 },
+        'spinach': { category: 'vegetable', image: '🥬', price: 10000 },
+        'mozzarella cheese': { category: 'cheese', image: '🧀', price: 18000 },
+        'parmesan cheese': { category: 'cheese', image: '🧀', price: 20000 },
+        'cheddar cheese': { category: 'cheese', image: '🧀', price: 16000 },
       };
 
       const toppingsFromInventory: Topping[] = [];
-      Object.entries(toppingCategories).forEach(([name, category]) => {
+      Object.entries(toppingNameMap).forEach(([name, data]) => {
         if (inventoryMap.has(name)) {
           toppingsFromInventory.push({
             id: name.replace(/\s+/g, '-'),
             name: name.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' '),
-            category: category as any,
-            price: toppingPrices[name] || 10000,
-            image: toppingImages[name] || '🍕',
+            category: data.category as any,
+            price: data.price,
+            image: data.image,
           });
         }
       });
@@ -100,27 +66,41 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
       setAvailableToppings(toppingsFromInventory);
 
       const crustsFromInventory = crustTypes.filter(crust => {
-        const crustName = `${crust.name.split(' ')[0]} Crust`.toLowerCase();
-        return inventoryMap.has(crustName);
+        const variations = [
+          crust.name.toLowerCase(),
+          `${crust.name.split(' ')[0].toLowerCase()} crust`,
+          crust.id,
+        ];
+        return variations.some(v => inventoryMap.has(v));
       });
-      setAvailableCrusts(crustsFromInventory);
+      setAvailableCrusts(crustsFromInventory.length > 0 ? crustsFromInventory : crustTypes);
 
       const saucesFromInventory = baseSauces.filter(sauce => {
-        const sauceName = sauce.name.includes('Tomato') ? 'tomato sauce' :
-                          sauce.name.includes('White') ? 'white sauce' :
-                          sauce.name.includes('BBQ') ? 'bbq sauce' : sauce.name.toLowerCase();
-        return inventoryMap.has(sauceName);
+        const variations = [
+          sauce.name.toLowerCase(),
+          sauce.id,
+        ];
+        return variations.some(v => inventoryMap.has(v));
       });
-      setAvailableSauces(saucesFromInventory);
+      setAvailableSauces(saucesFromInventory.length > 0 ? saucesFromInventory : baseSauces);
 
       if (saucesFromInventory.length > 0) {
         setSelectedSauce(saucesFromInventory[0].id);
+      } else {
+        setSelectedSauce(baseSauces[0].id);
       }
       if (crustsFromInventory.length > 0) {
         setSelectedCrust(crustsFromInventory[0].id as any);
+      } else {
+        setSelectedCrust(crustTypes[0].id as any);
       }
     } catch (error) {
       console.error('Error loading inventory:', error);
+      setAvailableToppings([]);
+      setAvailableCrusts(crustTypes);
+      setAvailableSauces(baseSauces);
+      setSelectedSauce(baseSauces[0].id);
+      setSelectedCrust(crustTypes[0].id as any);
     } finally {
       setIsLoading(false);
     }
@@ -186,7 +166,7 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-yellow-50 via-yellow-100 to-red-50">
-      <div className="container mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent mb-2">
             🍕 Buat Pizza Impianmu!
@@ -194,9 +174,83 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
           <p className="text-gray-600 text-lg">Kreativitas tanpa batas, rasa tak terbatas!</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <div className="bg-white rounded-3xl p-6 shadow-xl">
-            <h2 className="text-2xl font-bold text-center mb-4 text-gray-800">Preview Pizza</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="lg:col-span-1 space-y-4 max-h-screen overflow-y-auto pr-2">
+            <div className="bg-white rounded-2xl p-5 shadow-lg sticky top-4">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">🍕 Pilih Ukuran</h3>
+              <div className="space-y-2">
+                {pizzaSizes.map((size) => (
+                  <button
+                    key={size.id}
+                    onClick={() => setSelectedSize(size.id as any)}
+                    className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                      selectedSize === size.id
+                        ? 'border-red-500 bg-red-50 text-red-700'
+                        : 'border-gray-200 hover:border-red-300'
+                    }`}
+                  >
+                    <div className="font-semibold text-sm">{size.name}</div>
+                    <div className="text-xs text-gray-600">Rp {size.basePrice.toLocaleString()}</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">🥖 Jenis Adonan</h3>
+              {availableCrusts.length === 0 ? (
+                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada adonan</p>
+              ) : (
+                <div className="space-y-2">
+                  {availableCrusts.map((crust) => (
+                    <button
+                      key={crust.id}
+                      onClick={() => setSelectedCrust(crust.id as any)}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        selectedCrust === crust.id
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-gray-200 hover:border-red-300'
+                      }`}
+                    >
+                      <div className="font-semibold text-sm">{crust.name}</div>
+                      <div className="text-xs text-gray-600">
+                        {crust.price > 0 ? `+Rp ${crust.price.toLocaleString()}` : 'Gratis'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-2xl p-5 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-3">🥫 Pilih Saus</h3>
+              {availableSauces.length === 0 ? (
+                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada saus</p>
+              ) : (
+                <div className="space-y-2">
+                  {availableSauces.map((sauce) => (
+                    <button
+                      key={sauce.id}
+                      onClick={() => setSelectedSauce(sauce.id)}
+                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                        selectedSauce === sauce.id
+                          ? 'border-red-500 bg-red-50 text-red-700'
+                          : 'border-gray-200 hover:border-red-300'
+                      }`}
+                    >
+                      <div className="font-semibold text-sm">{sauce.name}</div>
+                      <div className="text-xs text-gray-600">
+                        {sauce.price > 0 ? `+Rp ${sauce.price.toLocaleString()}` : 'Gratis'}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="lg:col-span-2 bg-white rounded-3xl p-8 shadow-xl h-fit">
+            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Preview Pizza</h2>
             <PizzaPreview
               size={selectedSize}
               crust={selectedCrust}
@@ -204,8 +258,8 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
               toppings={selectedToppings}
             />
 
-            <div className="mt-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+            <div className="mt-8">
+              <label className="block text-sm font-semibold text-gray-700 mb-2">
                 Nama Pizza Kamu ✨
               </label>
               <input
@@ -213,137 +267,65 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
                 value={pizzaName}
                 onChange={(e) => setPizzaName(e.target.value)}
                 placeholder="Contoh: Dragon Fire Special"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent text-lg"
+                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
               />
             </div>
 
-            <div className="mt-6 text-center">
-              <div className="bg-gradient-to-r from-yellow-400 to-red-500 text-white p-4 rounded-2xl mb-4">
-                <p className="text-sm opacity-90">Total Harga</p>
+            <div className="mt-6">
+              <div className="bg-gradient-to-r from-yellow-400 to-red-500 text-white p-4 rounded-2xl mb-4 text-center">
+                <p className="text-xs opacity-90">Total Harga</p>
                 <p className="text-3xl font-bold">Rp {calculatePrice().toLocaleString()}</p>
               </div>
 
               <button
                 onClick={handleComplete}
                 disabled={!pizzaName.trim()}
-                className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-4 rounded-2xl font-bold text-lg hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
+                className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-4 rounded-2xl font-bold hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
               >
-                <Sparkles size={24} />
+                <Sparkles size={20} />
                 <span>Tambahkan ke Keranjang</span>
               </button>
             </div>
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-white rounded-3xl p-6 shadow-xl">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">🍕 Pilih Ukuran</h3>
-              <div className="grid grid-cols-3 gap-3">
-                {pizzaSizes.map((size) => (
-                  <button
-                    key={size.id}
-                    onClick={() => setSelectedSize(size.id as any)}
-                    className={`p-4 rounded-2xl border-2 transition-all transform hover:scale-105 ${
-                      selectedSize === size.id
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : 'border-gray-200 hover:border-red-300'
-                    }`}
-                  >
-                    <div className="text-lg font-semibold">{size.name}</div>
-                    <div className="text-sm text-gray-600">Rp {size.basePrice.toLocaleString()}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl p-6 shadow-xl">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">🥖 Jenis Adonan</h3>
-              {availableCrusts.length === 0 && (
-                <p className="text-gray-500 text-center py-4">Tidak ada adonan tersedia saat ini</p>
-              )}
-              <div className="grid grid-cols-3 gap-3">
-                {availableCrusts.map((crust) => (
-                  <button
-                    key={crust.id}
-                    onClick={() => setSelectedCrust(crust.id as any)}
-                    className={`p-4 rounded-2xl border-2 transition-all transform hover:scale-105 ${
-                      selectedCrust === crust.id
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : 'border-gray-200 hover:border-red-300'
-                    }`}
-                  >
-                    <div className="font-semibold">{crust.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {crust.price > 0 ? `+Rp ${crust.price.toLocaleString()}` : 'Gratis'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-white rounded-3xl p-6 shadow-xl">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">🥫 Pilih Saus</h3>
-              {availableSauces.length === 0 && (
-                <p className="text-gray-500 text-center py-4">Tidak ada saus tersedia saat ini</p>
-              )}
-              <div className="grid grid-cols-2 gap-3">
-                {availableSauces.map((sauce) => (
-                  <button
-                    key={sauce.id}
-                    onClick={() => setSelectedSauce(sauce.id)}
-                    className={`p-3 rounded-xl border-2 transition-all ${
-                      selectedSauce === sauce.id
-                        ? 'border-red-500 bg-red-50 text-red-700'
-                        : 'border-gray-200 hover:border-red-300'
-                    }`}
-                  >
-                    <div className="font-medium">{sauce.name}</div>
-                    <div className="text-sm text-gray-600">
-                      {sauce.price > 0 ? `+Rp ${sauce.price.toLocaleString()}` : 'Gratis'}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
+          <div className="lg:col-span-1 space-y-4 max-h-screen overflow-y-auto pl-2">
             {Object.entries(toppingsByCategory).map(([category, toppings]) => {
               if (toppings.length === 0) return null;
               return (
-              <div key={category} className="bg-white rounded-3xl p-6 shadow-xl">
-                <h3 className="text-xl font-bold text-gray-800 mb-4">
-                  {category === 'meat' && '🥩 Daging'}
-                  {category === 'vegetable' && '🥬 Sayuran'}
-                  {category === 'cheese' && '🧀 Keju'}
-                  {category === 'sauce' && '🌶️ Saus Spesial'}
-                </h3>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                  {toppings.map((topping) => {
-                    const isSelected = selectedToppings.find(t => t.id === topping.id);
-                    return (
-                      <button
-                        key={topping.id}
-                        onClick={() => toggleTopping(topping)}
-                        className={`p-3 rounded-xl border-2 transition-all transform hover:scale-105 ${
-                          isSelected
-                            ? 'border-green-500 bg-green-50 text-green-700'
-                            : 'border-gray-200 hover:border-red-300'
-                        }`}
-                      >
-                        <div className="text-2xl mb-1">{topping.image}</div>
-                        <div className="font-medium text-sm">{topping.name}</div>
-                        <div className="text-xs text-gray-600">
-                          +Rp {topping.price.toLocaleString()}
-                        </div>
-                        {isSelected && (
-                          <div className="text-green-600 mt-1">
-                            <Plus size={16} className="mx-auto" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
+                <div key={category} className="bg-white rounded-2xl p-4 shadow-lg">
+                  <h4 className="text-sm font-bold text-gray-800 mb-3">
+                    {category === 'meat' && '🥩 Daging'}
+                    {category === 'vegetable' && '🥬 Sayuran'}
+                    {category === 'cheese' && '🧀 Keju'}
+                    {category === 'sauce' && '🌶️ Saus'}
+                  </h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {toppings.map((topping) => {
+                      const isSelected = selectedToppings.find(t => t.id === topping.id);
+                      return (
+                        <button
+                          key={topping.id}
+                          onClick={() => toggleTopping(topping)}
+                          className={`p-2 rounded-lg border-2 transition-all transform hover:scale-105 text-center ${
+                            isSelected
+                              ? 'border-green-500 bg-green-50'
+                              : 'border-gray-200 hover:border-red-300'
+                          }`}
+                        >
+                          <div className="text-xl mb-1">{topping.image}</div>
+                          <div className="font-medium text-xs">{topping.name.split(' ')[0]}</div>
+                          <div className="text-xs text-gray-600">+Rp {(topping.price / 1000).toFixed(0)}k</div>
+                          {isSelected && (
+                            <div className="text-green-600 mt-1">
+                              <Plus size={14} className="mx-auto" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            );
+              );
             })}
           </div>
         </div>
