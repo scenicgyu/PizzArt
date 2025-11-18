@@ -169,51 +169,102 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
           <h1 className="text-4xl font-bold bg-gradient-to-r from-red-600 to-red-700 bg-clip-text text-transparent mb-2">
-            🍕 Buat Pizza Impianmu!
+            Buat Pizza Impianmu
           </h1>
-          <p className="text-gray-600 text-lg">Kreativitas tanpa batas, rasa tak terbatas!</p>
+          <p className="text-gray-600 text-lg">Kreativitas tanpa batas, rasa tak terbatas</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 space-y-4 max-h-screen overflow-y-auto pr-2">
-            <div className="bg-white rounded-2xl p-5 shadow-lg sticky top-4">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">🍕 Pilih Ukuran</h3>
-              <div className="space-y-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column - Preview Pizza (Sticky) */}
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-3xl p-6 shadow-xl sticky top-4">
+              <h2 className="text-xl font-bold text-center mb-4 text-gray-800">Preview Pizza</h2>
+              <PizzaPreview
+                size={selectedSize}
+                crust={selectedCrust}
+                sauce={selectedSauce}
+                toppings={selectedToppings}
+              />
+
+              <div className="mt-6">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  Nama Pizza Kamu
+                </label>
+                <input
+                  type="text"
+                  value={pizzaName}
+                  onChange={(e) => setPizzaName(e.target.value)}
+                  placeholder="Contoh: Dragon Fire Special"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
+                />
+              </div>
+
+              <div className="mt-6">
+                <div className="bg-gradient-to-r from-yellow-400 to-red-500 text-white p-4 rounded-2xl mb-4 text-center">
+                  <p className="text-xs opacity-90">Total Harga</p>
+                  <p className="text-3xl font-bold">Rp {calculatePrice().toLocaleString()}</p>
+                </div>
+
+                <button
+                  onClick={handleComplete}
+                  disabled={!pizzaName.trim()}
+                  className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-4 rounded-2xl font-bold hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
+                >
+                  <Sparkles size={20} />
+                  <span>Tambahkan ke Keranjang</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Right Column - Options (Scrollable) */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Pilih Ukuran */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="text-2xl">🍕</span>
+                Pilih Ukuran
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                 {pizzaSizes.map((size) => (
                   <button
                     key={size.id}
                     onClick={() => setSelectedSize(size.id as any)}
-                    className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                    className={`p-4 rounded-xl border-2 transition-all text-center ${
                       selectedSize === size.id
                         ? 'border-red-500 bg-red-50 text-red-700'
                         : 'border-gray-200 hover:border-red-300'
                     }`}
                   >
-                    <div className="font-semibold text-sm">{size.name}</div>
-                    <div className="text-xs text-gray-600">Rp {size.basePrice.toLocaleString()}</div>
+                    <div className="font-bold text-base">{size.name}</div>
+                    <div className="text-sm text-gray-600 mt-1">Rp {size.basePrice.toLocaleString()}</div>
                   </button>
                 ))}
               </div>
             </div>
 
-            <div className="bg-white rounded-2xl p-5 shadow-lg">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">🥖 Jenis Adonan</h3>
+            {/* Jenis Adonan */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="text-2xl">🥖</span>
+                Jenis Adonan
+              </h3>
               {availableCrusts.length === 0 ? (
-                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada adonan</p>
+                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada adonan tersedia</p>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   {availableCrusts.map((crust) => (
                     <button
                       key={crust.id}
                       onClick={() => setSelectedCrust(crust.id as any)}
-                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                      className={`p-4 rounded-xl border-2 transition-all text-center ${
                         selectedCrust === crust.id
                           ? 'border-red-500 bg-red-50 text-red-700'
                           : 'border-gray-200 hover:border-red-300'
                       }`}
                     >
-                      <div className="font-semibold text-sm">{crust.name}</div>
-                      <div className="text-xs text-gray-600">
+                      <div className="font-bold text-base">{crust.name}</div>
+                      <div className="text-sm text-gray-600 mt-1">
                         {crust.price > 0 ? `+Rp ${crust.price.toLocaleString()}` : 'Gratis'}
                       </div>
                     </button>
@@ -222,24 +273,28 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
               )}
             </div>
 
-            <div className="bg-white rounded-2xl p-5 shadow-lg">
-              <h3 className="text-lg font-bold text-gray-800 mb-3">🥫 Pilih Saus</h3>
+            {/* Pilih Saus */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg">
+              <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <span className="text-2xl">🥫</span>
+                Pilih Saus
+              </h3>
               {availableSauces.length === 0 ? (
-                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada saus</p>
+                <p className="text-gray-500 text-center py-3 text-sm">Tidak ada saus tersedia</p>
               ) : (
-                <div className="space-y-2">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {availableSauces.map((sauce) => (
                     <button
                       key={sauce.id}
                       onClick={() => setSelectedSauce(sauce.id)}
-                      className={`w-full p-3 rounded-xl border-2 transition-all text-left ${
+                      className={`p-4 rounded-xl border-2 transition-all text-center ${
                         selectedSauce === sauce.id
                           ? 'border-red-500 bg-red-50 text-red-700'
                           : 'border-gray-200 hover:border-red-300'
                       }`}
                     >
-                      <div className="font-semibold text-sm">{sauce.name}</div>
-                      <div className="text-xs text-gray-600">
+                      <div className="font-bold text-sm">{sauce.name}</div>
+                      <div className="text-xs text-gray-600 mt-1">
                         {sauce.price > 0 ? `+Rp ${sauce.price.toLocaleString()}` : 'Gratis'}
                       </div>
                     </button>
@@ -247,86 +302,138 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
                 </div>
               )}
             </div>
-          </div>
 
-          <div className="lg:col-span-2 bg-white rounded-3xl p-8 shadow-xl h-fit">
-            <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Preview Pizza</h2>
-            <PizzaPreview
-              size={selectedSize}
-              crust={selectedCrust}
-              sauce={selectedSauce}
-              toppings={selectedToppings}
-            />
-
-            <div className="mt-8">
-              <label className="block text-sm font-semibold text-gray-700 mb-2">
-                Nama Pizza Kamu ✨
-              </label>
-              <input
-                type="text"
-                value={pizzaName}
-                onChange={(e) => setPizzaName(e.target.value)}
-                placeholder="Contoh: Dragon Fire Special"
-                className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-transparent"
-              />
-            </div>
-
-            <div className="mt-6">
-              <div className="bg-gradient-to-r from-yellow-400 to-red-500 text-white p-4 rounded-2xl mb-4 text-center">
-                <p className="text-xs opacity-90">Total Harga</p>
-                <p className="text-3xl font-bold">Rp {calculatePrice().toLocaleString()}</p>
-              </div>
-
-              <button
-                onClick={handleComplete}
-                disabled={!pizzaName.trim()}
-                className="w-full bg-gradient-to-r from-red-600 to-red-700 text-white py-4 rounded-2xl font-bold hover:from-red-700 hover:to-red-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all transform hover:scale-105 flex items-center justify-center space-x-2"
-              >
-                <Sparkles size={20} />
-                <span>Tambahkan ke Keranjang</span>
-              </button>
-            </div>
-          </div>
-
-          <div className="lg:col-span-1 space-y-4 max-h-screen overflow-y-auto pl-2">
-            {Object.entries(toppingsByCategory).map(([category, toppings]) => {
-              if (toppings.length === 0) return null;
-              return (
-                <div key={category} className="bg-white rounded-2xl p-4 shadow-lg">
-                  <h4 className="text-sm font-bold text-gray-800 mb-3">
-                    {category === 'meat' && '🥩 Daging'}
-                    {category === 'vegetable' && '🥬 Sayuran'}
-                    {category === 'cheese' && '🧀 Keju'}
-                    {category === 'sauce' && '🌶️ Saus'}
-                  </h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    {toppings.map((topping) => {
-                      const isSelected = selectedToppings.find(t => t.id === topping.id);
-                      return (
-                        <button
-                          key={topping.id}
-                          onClick={() => toggleTopping(topping)}
-                          className={`p-2 rounded-lg border-2 transition-all transform hover:scale-105 text-center ${
-                            isSelected
-                              ? 'border-green-500 bg-green-50'
-                              : 'border-gray-200 hover:border-red-300'
-                          }`}
-                        >
-                          <div className="text-xl mb-1">{topping.image}</div>
-                          <div className="font-medium text-xs">{topping.name.split(' ')[0]}</div>
-                          <div className="text-xs text-gray-600">+Rp {(topping.price / 1000).toFixed(0)}k</div>
-                          {isSelected && (
-                            <div className="text-green-600 mt-1">
-                              <Plus size={14} className="mx-auto" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
+            {/* Topping Daging */}
+            {toppingsByCategory.meat.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🥩</span>
+                  Daging
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {toppingsByCategory.meat.map((topping) => {
+                    const isSelected = selectedToppings.find(t => t.id === topping.id);
+                    return (
+                      <button
+                        key={topping.id}
+                        onClick={() => toggleTopping(topping)}
+                        className={`p-4 rounded-xl border-2 transition-all transform hover:scale-105 text-center ${
+                          isSelected
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-red-300'
+                        }`}
+                      >
+                        <div className="text-3xl mb-2">{topping.image}</div>
+                        <div className="font-bold text-sm">{topping.name}</div>
+                        <div className="text-xs text-gray-600 mt-1">+Rp {(topping.price / 1000).toFixed(0)}k</div>
+                        {isSelected && (
+                          <div className="text-green-600 mt-2 font-semibold text-xs">Dipilih</div>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
-              );
-            })}
+              </div>
+            )}
+
+            {/* Topping Sayuran */}
+            {toppingsByCategory.vegetable.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🥬</span>
+                  Sayuran
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {toppingsByCategory.vegetable.map((topping) => {
+                    const isSelected = selectedToppings.find(t => t.id === topping.id);
+                    return (
+                      <button
+                        key={topping.id}
+                        onClick={() => toggleTopping(topping)}
+                        className={`p-4 rounded-xl border-2 transition-all transform hover:scale-105 text-center ${
+                          isSelected
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-red-300'
+                        }`}
+                      >
+                        <div className="text-3xl mb-2">{topping.image}</div>
+                        <div className="font-bold text-sm">{topping.name}</div>
+                        <div className="text-xs text-gray-600 mt-1">+Rp {(topping.price / 1000).toFixed(0)}k</div>
+                        {isSelected && (
+                          <div className="text-green-600 mt-2 font-semibold text-xs">Dipilih</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Topping Keju */}
+            {toppingsByCategory.cheese.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🧀</span>
+                  Keju
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {toppingsByCategory.cheese.map((topping) => {
+                    const isSelected = selectedToppings.find(t => t.id === topping.id);
+                    return (
+                      <button
+                        key={topping.id}
+                        onClick={() => toggleTopping(topping)}
+                        className={`p-4 rounded-xl border-2 transition-all transform hover:scale-105 text-center ${
+                          isSelected
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-red-300'
+                        }`}
+                      >
+                        <div className="text-3xl mb-2">{topping.image}</div>
+                        <div className="font-bold text-sm">{topping.name}</div>
+                        <div className="text-xs text-gray-600 mt-1">+Rp {(topping.price / 1000).toFixed(0)}k</div>
+                        {isSelected && (
+                          <div className="text-green-600 mt-2 font-semibold text-xs">Dipilih</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Saus Spesial */}
+            {toppingsByCategory.sauce.length > 0 && (
+              <div className="bg-white rounded-2xl p-6 shadow-lg">
+                <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+                  <span className="text-2xl">🌶️</span>
+                  Saus Spesial
+                </h3>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {toppingsByCategory.sauce.map((topping) => {
+                    const isSelected = selectedToppings.find(t => t.id === topping.id);
+                    return (
+                      <button
+                        key={topping.id}
+                        onClick={() => toggleTopping(topping)}
+                        className={`p-4 rounded-xl border-2 transition-all transform hover:scale-105 text-center ${
+                          isSelected
+                            ? 'border-green-500 bg-green-50'
+                            : 'border-gray-200 hover:border-red-300'
+                        }`}
+                      >
+                        <div className="text-3xl mb-2">{topping.image}</div>
+                        <div className="font-bold text-sm">{topping.name}</div>
+                        <div className="text-xs text-gray-600 mt-1">+Rp {(topping.price / 1000).toFixed(0)}k</div>
+                        {isSelected && (
+                          <div className="text-green-600 mt-2 font-semibold text-xs">Dipilih</div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
