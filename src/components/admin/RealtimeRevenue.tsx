@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { TrendingUp, DollarSign, Activity, RefreshCw } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { db } from '../../lib/firebase';
+import { collection, query, where, getDocs, onSnapshot, Timestamp } from 'firebase/firestore';
 
 interface RevenueStats {
   total_revenue: number;
@@ -25,69 +26,133 @@ const RealtimeRevenue: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [lastUpdate, setLastUpdate] = useState<Date>(new Date());
 
-  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-  const supabase = createClient(supabaseUrl, supabaseKey);
-
   useEffect(() => {
-    fetchStats();
+    loadStats();
 
-    const channel = supabase
-      .channel('revenue-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'payments',
-        },
-        (payload) => {
-          console.log('Payment change detected:', payload);
-          fetchStats();
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'revenue_stats',
-        },
-        (payload) => {
-          console.log('Revenue stats change detected:', payload);
-          fetchStats();
-        }
-      )
-      .subscribe();
+    const unsubscribe = onSnapshot(collection(db, 'payments'), () => {
+      loadStats();
+    });
 
-    const interval = setInterval(fetchStats, 30000);
+    const interval = setInterval(loadStats, 30000);
 
     return () => {
-      supabase.removeChannel(channel);
+      unsubscribe();
       clearInterval(interval);
     };
   }, []);
 
-  const fetchStats = async () => {
+  const loadStats = async () => {
     try {
-      const response = await fetch(
-        `${supabaseUrl}/functions/v1/get-revenue-stats`,
-        {
-          headers: {
-            Authorization: `Bearer ${supabaseKey}`,
-            'Content-Type': 'application/json',
-          },
+      const paymentsQuery = query(collection(db, 'payments'), where('payment_status', '==', 'success'));
+      const paymentsSnapshot = await getDocs(paymentsQuery);
+
+      const ordersQuery = query(collection(db, 'orders'));
+      const ordersSnapshot = await getDocs(ordersQuery);
+
+      const payments = paymentsSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const orders = ordersSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      let totalRevenue = 0;
+      let todayRevenue = 0;
+      let todayOrders = 0;
+      let successfulPayments = 0;
+      let todaySuccessfulPayments = 0;
+
+      payments.forEach((payment: any) => {
+        const amount = payment.total_amount || 0;
+        totalRevenue += Number(amount);
+
+        const paymentDate = payment.paid_at instanceof Timestamp
+          ? payment.paid_at.toDate()
+          : new Date(payment.paid_at);
+        paymentDate.setHours(0, 0, 0, 0);
+
+        if (paymentDate.getTime() === today.getTime()) {
+          todayRevenue += Number(amount);
+          todaySuccessfulPayments += 1;
         }
-      );
+        successfulPayments += 1;
+      });
 
-      const data = await response.json();
+      const pendingPayments = paymentsSnapshot.docs.length > 0
+        ? 0
+        : (await getDocs(query(collection(db, 'payments'), where('payment_status', '==', 'pending')))).size;
 
-      if (data.success) {
-        setStats(data.stats);
-        setLastUpdate(new Date());
+      todayOrders = orders.filter((order: any) => {
+        if (!order.created_at) return false;
+        const orderDate = order.created_at instanceof Timestamp
+          ? order.created_at.toDate()
+          : new Date(order.created_at);
+        orderDate.setHours(0, 0, 0, 0);
+        return orderDate.getTime() === today.getTime();
+      }).length;
+
+      const last30Days: Array<{
+        date: string;
+        total_revenue: number;
+        total_orders: number;
+        successful_payments: number;
+      }> = [];
+
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date(today);
+        date.setDate(date.getDate() - i);
+
+        let dayRevenue = 0;
+        let dayOrders = 0;
+        let dayPayments = 0;
+
+        payments.forEach((payment: any) => {
+          const paymentDate = payment.paid_at instanceof Timestamp
+            ? payment.paid_at.toDate()
+            : new Date(payment.paid_at);
+          paymentDate.setHours(0, 0, 0, 0);
+
+          if (paymentDate.getTime() === date.getTime()) {
+            dayRevenue += Number(payment.total_amount || 0);
+            dayPayments += 1;
+          }
+        });
+
+        orders.forEach((order: any) => {
+          if (!order.created_at) return;
+          const orderDate = order.created_at instanceof Timestamp
+            ? order.created_at.toDate()
+            : new Date(order.created_at);
+          orderDate.setHours(0, 0, 0, 0);
+
+          if (orderDate.getTime() === date.getTime()) {
+            dayOrders += 1;
+          }
+        });
+
+        last30Days.push({
+          date: date.toISOString(),
+          total_revenue: dayRevenue,
+          total_orders: dayOrders,
+          successful_payments: dayPayments,
+        });
       }
+
+      setStats({
+        total_revenue: totalRevenue,
+        total_orders: orders.length,
+        total_payments: successfulPayments,
+        today: {
+          total_revenue: todayRevenue,
+          total_orders: todayOrders,
+          successful_payments: todaySuccessfulPayments,
+        },
+        recent: last30Days,
+        pending_payments: pendingPayments,
+      });
+
+      setLastUpdate(new Date());
     } catch (error) {
-      console.error('Error fetching revenue stats:', error);
+      console.error('Error loading revenue stats:', error);
     } finally {
       setIsLoading(false);
     }
@@ -143,7 +208,7 @@ const RealtimeRevenue: React.FC = () => {
           </div>
         </div>
         <button
-          onClick={fetchStats}
+          onClick={() => loadStats()}
           className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
           title="Refresh"
         >
@@ -202,10 +267,10 @@ const RealtimeRevenue: React.FC = () => {
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-        <h3 className="text-lg font-bold text-slate-900 mb-4">Tren 30 Hari Terakhir</h3>
+        <h3 className="text-lg font-bold text-slate-900 mb-4">Tren 7 Hari Terakhir</h3>
         <div className="space-y-2">
           {stats.recent.length > 0 ? (
-            stats.recent.slice(0, 7).map((day) => (
+            stats.recent.map((day) => (
               <div
                 key={day.date}
                 className="flex items-center justify-between p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors"
@@ -240,7 +305,7 @@ const RealtimeRevenue: React.FC = () => {
         <div className="flex items-center gap-2 text-green-800">
           <Activity className="w-5 h-5 animate-pulse" />
           <p className="text-sm font-medium">
-            Data diperbarui secara real-time saat ada pembayaran baru
+            Data diperbarui secara real-time dari Firestore
           </p>
         </div>
       </div>

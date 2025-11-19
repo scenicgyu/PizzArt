@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { QrCode, Clock, CheckCircle, XCircle, Loader, Copy, RefreshCw } from 'lucide-react';
+import { db } from '../../lib/firebase';
+import { collection, addDoc, query, where, getDocs, doc, getDoc, Timestamp, serverTimestamp } from 'firebase/firestore';
 
 interface QRISPaymentProps {
   orderId: string;
@@ -33,20 +35,21 @@ const QRISPayment: React.FC<QRISPaymentProps> = ({
   const [paymentStatus, setPaymentStatus] = useState<'pending' | 'success' | 'failed' | 'expired'>('pending');
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [copied, setCopied] = useState(false);
+  const [paymentId, setPaymentId] = useState<string | null>(null);
 
   useEffect(() => {
     createPayment();
   }, []);
 
   useEffect(() => {
-    if (payment && paymentStatus === 'pending') {
+    if (paymentId && paymentStatus === 'pending') {
       const interval = setInterval(() => {
         checkPaymentStatus();
       }, 5000);
 
       return () => clearInterval(interval);
     }
-  }, [payment, paymentStatus]);
+  }, [paymentId, paymentStatus]);
 
   useEffect(() => {
     if (payment?.expiry_time) {
@@ -67,60 +70,57 @@ const QRISPayment: React.FC<QRISPaymentProps> = ({
 
   const createPayment = async () => {
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const expiryTime = new Date();
+      expiryTime.setMinutes(expiryTime.getMinutes() + 15);
 
-      const response = await fetch(`${supabaseUrl}/functions/v1/create-qris-payment`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${supabaseKey}`,
-          'Content-Type': 'application/json',
+      const qrCodeURL = `https://api.midtrans.com/qris?amount=${amount}&orderId=${orderId}`;
+
+      const paymentData = {
+        order_id: orderId,
+        user_id: customerEmail,
+        total_amount: amount,
+        payment_status: 'pending',
+        payment_method: 'qris',
+        qris_reference: qrCodeURL,
+        transaction_id: `TXN-${Date.now()}`,
+        midtrans_order_id: `ORDER-${orderId}-${Date.now()}`,
+        expiry_time: expiryTime.toISOString(),
+        created_at: serverTimestamp(),
+        updated_at: serverTimestamp(),
+        metadata: {
+          customer_name: customerName,
+          customer_email: customerEmail,
         },
-        body: JSON.stringify({
-          orderId,
-          amount,
-          customerDetails: {
-            email: customerEmail,
-            name: customerName,
-          },
-        }),
+      };
+
+      const docRef = await addDoc(collection(db, 'payments'), paymentData);
+      setPaymentId(docRef.id);
+
+      setPayment({
+        id: docRef.id,
+        qr_string: qrCodeURL,
+        transaction_id: paymentData.transaction_id,
+        midtrans_order_id: paymentData.midtrans_order_id,
+        expiry_time: expiryTime.toISOString(),
+        amount: amount,
       });
 
-      const data = await response.json();
-
-      if (!data.success) {
-        throw new Error(data.error || 'Failed to create payment');
-      }
-
-      setPayment(data.payment);
       setIsLoading(false);
     } catch (err: any) {
-      setError(err.message || 'Failed to create payment');
+      console.error('Error creating payment:', err);
+      setError(err.message || 'Gagal membuat pembayaran');
       setIsLoading(false);
     }
   };
 
   const checkPaymentStatus = async () => {
-    if (!payment) return;
+    if (!paymentId) return;
 
     try {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const paymentDoc = await getDoc(doc(db, 'payments', paymentId));
 
-      const response = await fetch(
-        `${supabaseUrl}/rest/v1/payments?midtrans_order_id=eq.${payment.midtrans_order_id}&select=status`,
-        {
-          headers: {
-            'apikey': supabaseKey,
-            'Authorization': `Bearer ${supabaseKey}`,
-          },
-        }
-      );
-
-      const data = await response.json();
-
-      if (data && data[0]) {
-        const newStatus = data[0].status;
+      if (paymentDoc.exists()) {
+        const newStatus = paymentDoc.data().payment_status;
         if (newStatus !== paymentStatus) {
           setPaymentStatus(newStatus);
           if (newStatus === 'success') {

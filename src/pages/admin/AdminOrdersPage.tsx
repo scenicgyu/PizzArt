@@ -1,147 +1,92 @@
 import React, { useEffect, useState } from 'react';
 import AdminLayout from '../../components/admin/AdminLayout';
 import { db } from '../../lib/firebase';
-import { collection, query, orderBy, getDocs, where, doc, updateDoc, onSnapshot, serverTimestamp } from 'firebase/firestore';
-import {
-  ShoppingBag,
-  Clock,
-  CheckCircle,
-  Truck,
-  Search,
-  Filter,
-  ChevronDown,
-  Package,
-} from 'lucide-react';
+import { collection, query, orderBy, getDocs, doc, updateDoc, Timestamp } from 'firebase/firestore';
+import { ShoppingBag, Clock, CheckCircle, XCircle, Search } from 'lucide-react';
+
+interface OrderItem {
+  pizza_name: string;
+  quantity: number;
+  price: number;
+}
 
 interface Order {
   id: string;
   user_name: string;
   user_email: string;
   total_price: number;
-  status: 'pending' | 'processing' | 'completed' | 'shipped';
-  created_at: string;
-  order_items: OrderItem[];
+  status: 'pending' | 'processing' | 'completed' | 'cancelled';
+  created_at: any;
+  items?: OrderItem[];
 }
 
-interface OrderItem {
-  id: string;
-  pizza_name: string;
-  size: string;
-  crust: string;
-  sauce: string;
-  toppings: any;
-  quantity: number;
-  price: number;
-}
-
-const AdminOrdersPage = () => {
+const AdminOrdersPage: React.FC = () => {
   const [orders, setOrders] = useState<Order[]>([]);
-  const [filteredOrders, setFilteredOrders] = useState<Order[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [expandedOrder, setExpandedOrder] = useState<string | null>(null);
+  const [filterStatus, setFilterStatus] = useState<'all' | 'pending' | 'processing' | 'completed'>('all');
 
   useEffect(() => {
-    const ordersQuery = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
-
-    const unsubscribe = onSnapshot(ordersQuery, async (snapshot) => {
-      const ordersData = await Promise.all(
-        snapshot.docs.map(async (docSnap) => {
-          const orderData = { id: docSnap.id, ...docSnap.data() } as Order;
-
-          const itemsQuery = query(collection(db, 'order_items'), where('order_id', '==', docSnap.id));
-          const itemsSnapshot = await getDocs(itemsQuery);
-          orderData.order_items = itemsSnapshot.docs.map(itemDoc => ({
-            id: itemDoc.id,
-            ...itemDoc.data()
-          } as OrderItem));
-
-          return orderData;
-        })
-      );
-
-      setOrders(ordersData);
-      setIsLoading(false);
-    }, (error) => {
-      console.error('Error loading orders:', error);
-      setIsLoading(false);
-    });
-
-    return () => unsubscribe();
+    loadOrders();
+    const interval = setInterval(loadOrders, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    filterOrders();
-  }, [orders, searchTerm, statusFilter]);
+  const loadOrders = async () => {
+    try {
+      const ordersQuery = query(collection(db, 'orders'), orderBy('created_at', 'desc'));
+      const ordersSnapshot = await getDocs(ordersQuery);
 
+      const ordersList = ordersSnapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as Order[];
 
-  const filterOrders = () => {
-    let filtered = orders;
-
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter((order) => order.status === statusFilter);
+      setOrders(ordersList);
+    } catch (error) {
+      console.error('Error loading orders:', error);
+    } finally {
+      setIsLoading(false);
     }
-
-    if (searchTerm) {
-      filtered = filtered.filter(
-        (order) =>
-          order.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.user_email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          order.id.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    setFilteredOrders(filtered);
   };
 
-  const updateOrderStatus = async (orderId: string, newStatus: Order['status']) => {
+  const handleStatusChange = async (orderId: string, newStatus: Order['status']) => {
     try {
       await updateDoc(doc(db, 'orders', orderId), {
         status: newStatus,
-        updated_at: serverTimestamp()
+        updated_at: new Date(),
       });
+      setOrders(orders.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
     } catch (error) {
-      console.error('Error updating order status:', error);
+      console.error('Error updating order:', error);
+      alert('Gagal mengubah status pesanan');
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: Order['status']) => {
     switch (status) {
-      case 'pending':
-        return 'bg-orange-100 text-orange-800';
-      case 'processing':
-        return 'bg-blue-100 text-blue-800';
-      case 'completed':
-        return 'bg-green-100 text-green-800';
-      case 'shipped':
-        return 'bg-purple-100 text-purple-800';
-      default:
-        return 'bg-slate-100 text-slate-800';
+      case 'pending': return 'bg-orange-100 text-orange-800';
+      case 'processing': return 'bg-blue-100 text-blue-800';
+      case 'completed': return 'bg-green-100 text-green-800';
+      case 'cancelled': return 'bg-red-100 text-red-800';
     }
   };
 
-  const getStatusIcon = (status: string) => {
+  const getStatusIcon = (status: Order['status']) => {
     switch (status) {
-      case 'pending':
-        return <Clock className="w-4 h-4" />;
-      case 'processing':
-        return <Package className="w-4 h-4" />;
-      case 'completed':
-        return <CheckCircle className="w-4 h-4" />;
-      case 'shipped':
-        return <Truck className="w-4 h-4" />;
-      default:
-        return <ShoppingBag className="w-4 h-4" />;
+      case 'pending': return <Clock className="w-4 h-4" />;
+      case 'processing': return <ShoppingBag className="w-4 h-4" />;
+      case 'completed': return <CheckCircle className="w-4 h-4" />;
+      case 'cancelled': return <XCircle className="w-4 h-4" />;
     }
   };
 
-  const statusOptions = [
-    { value: 'pending', label: 'Menunggu' },
-    { value: 'processing', label: 'Diproses' },
-    { value: 'completed', label: 'Selesai' },
-    { value: 'shipped', label: 'Dikirim' },
-  ];
+  const filteredOrders = orders.filter(order => {
+    const matchesSearch = order.user_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         order.user_email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterStatus === 'all' || order.status === filterStatus;
+    return matchesSearch && matchesFilter;
+  });
 
   if (isLoading) {
     return (
@@ -161,162 +106,113 @@ const AdminOrdersPage = () => {
       <div className="space-y-6">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Manajemen Pesanan</h1>
-          <p className="text-slate-600 mt-1">Kelola dan pantau semua pesanan pelanggan</p>
+          <p className="text-slate-600 mt-1">Kelola semua pesanan pelanggan</p>
         </div>
 
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex gap-4 mb-6">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Cari berdasarkan nama, email, atau ID pesanan..."
+                placeholder="Cari berdasarkan nama atau email..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-11 pr-4 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500"
+                className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
               />
             </div>
-            <div className="relative">
-              <Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="pl-11 pr-10 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500 focus:border-slate-500 appearance-none bg-white"
-              >
-                <option value="all">Semua Status</option>
-                <option value="pending">Menunggu</option>
-                <option value="processing">Diproses</option>
-                <option value="completed">Selesai</option>
-                <option value="shipped">Dikirim</option>
-              </select>
-            </div>
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value as any)}
+              className="px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-slate-500"
+            >
+              <option value="all">Semua Status</option>
+              <option value="pending">Menunggu</option>
+              <option value="processing">Diproses</option>
+              <option value="completed">Selesai</option>
+            </select>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-sm text-slate-600">
-            <p>
-              Menampilkan <span className="font-semibold">{filteredOrders.length}</span> dari{' '}
-              <span className="font-semibold">{orders.length}</span> pesanan
-            </p>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-200">
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Pelanggan</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Total</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Status</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Tanggal</th>
+                  <th className="text-left py-3 px-4 font-semibold text-slate-900">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredOrders.length > 0 ? (
+                  filteredOrders.map((order) => (
+                    <tr key={order.id} className="border-b border-slate-200 hover:bg-slate-50">
+                      <td className="py-4 px-4">
+                        <div>
+                          <p className="font-medium text-slate-900">{order.user_name}</p>
+                          <p className="text-sm text-slate-500">{order.user_email}</p>
+                        </div>
+                      </td>
+                      <td className="py-4 px-4 font-semibold text-slate-900">
+                        Rp {Number(order.total_price).toLocaleString('id-ID')}
+                      </td>
+                      <td className="py-4 px-4">
+                        <span className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(order.status)}`}>
+                          {getStatusIcon(order.status)}
+                          {order.status.charAt(0).toUpperCase() + order.status.slice(1)}
+                        </span>
+                      </td>
+                      <td className="py-4 px-4 text-sm text-slate-600">
+                        {order.created_at instanceof Timestamp
+                          ? order.created_at.toDate().toLocaleDateString('id-ID')
+                          : new Date(order.created_at).toLocaleDateString('id-ID')}
+                      </td>
+                      <td className="py-4 px-4">
+                        <select
+                          value={order.status}
+                          onChange={(e) => handleStatusChange(order.id, e.target.value as Order['status'])}
+                          className="px-3 py-1 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-slate-500"
+                        >
+                          <option value="pending">Menunggu</option>
+                          <option value="processing">Diproses</option>
+                          <option value="completed">Selesai</option>
+                          <option value="cancelled">Batal</option>
+                        </select>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={5} className="py-8 px-4 text-center text-slate-500">
+                      Tidak ada pesanan ditemukan
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
 
-        <div className="space-y-4">
-          {filteredOrders.length > 0 ? (
-            filteredOrders.map((order) => (
-              <div key={order.id} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-                <div className="p-6">
-                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                    <div className="flex-1">
-                      <div className="flex items-start gap-3">
-                        <div className="bg-slate-100 p-3 rounded-lg">
-                          <ShoppingBag className="w-6 h-6 text-slate-700" />
-                        </div>
-                        <div>
-                          <h3 className="font-bold text-slate-900 text-lg">{order.user_name}</h3>
-                          <p className="text-sm text-slate-500">{order.user_email}</p>
-                          <p className="text-xs text-slate-400 mt-1">
-                            ID: {order.id.slice(0, 8)}... •{' '}
-                            {new Date(order.created_at).toLocaleString('id-ID')}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-sm text-slate-500">Total</p>
-                        <p className="text-xl font-bold text-slate-900">
-                          Rp {Number(order.total_price).toLocaleString('id-ID')}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <select
-                          value={order.status}
-                          onChange={(e) =>
-                            updateOrderStatus(order.id, e.target.value as Order['status'])
-                          }
-                          className={`px-4 py-2 rounded-lg font-medium text-sm border-2 focus:ring-2 focus:ring-offset-2 ${getStatusColor(
-                            order.status
-                          )} border-transparent focus:ring-slate-500`}
-                        >
-                          {statusOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <button
-                          onClick={() =>
-                            setExpandedOrder(expandedOrder === order.id ? null : order.id)
-                          }
-                          className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
-                        >
-                          <ChevronDown
-                            className={`w-5 h-5 text-slate-600 transition-transform ${
-                              expandedOrder === order.id ? 'rotate-180' : ''
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {expandedOrder === order.id && (
-                    <div className="mt-6 pt-6 border-t border-slate-200">
-                      <h4 className="font-semibold text-slate-900 mb-3">Detail Pesanan</h4>
-                      <div className="space-y-3">
-                        {order.order_items.map((item) => (
-                          <div
-                            key={item.id}
-                            className="flex items-start justify-between p-4 bg-slate-50 rounded-lg"
-                          >
-                            <div className="flex-1">
-                              <h5 className="font-semibold text-slate-900">{item.pizza_name}</h5>
-                              <div className="mt-1 space-y-1 text-sm text-slate-600">
-                                <p>
-                                  <span className="font-medium">Ukuran:</span> {item.size} •{' '}
-                                  <span className="font-medium">Crust:</span> {item.crust}
-                                </p>
-                                <p>
-                                  <span className="font-medium">Saus:</span> {item.sauce}
-                                </p>
-                                {item.toppings && Array.isArray(item.toppings) && item.toppings.length > 0 && (
-                                  <p>
-                                    <span className="font-medium">Topping:</span>{' '}
-                                    {item.toppings.map((t: any) => t.name).join(', ')}
-                                  </p>
-                                )}
-                                <p>
-                                  <span className="font-medium">Jumlah:</span> {item.quantity}x
-                                </p>
-                              </div>
-                            </div>
-                            <div className="text-right">
-                              <p className="font-bold text-slate-900">
-                                Rp {Number(item.price).toLocaleString('id-ID')}
-                              </p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-12 text-center">
-              <ShoppingBag className="w-16 h-16 text-slate-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-slate-900 mb-2">Tidak ada pesanan</h3>
-              <p className="text-slate-500">
-                {searchTerm || statusFilter !== 'all'
-                  ? 'Tidak ada pesanan yang sesuai dengan filter'
-                  : 'Belum ada pesanan masuk'}
-              </p>
-            </div>
-          )}
+        <div className="grid grid-cols-3 gap-6">
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <p className="text-sm text-slate-600 mb-2">Total Pesanan Pending</p>
+            <p className="text-3xl font-bold text-orange-600">
+              {orders.filter(o => o.status === 'pending').length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <p className="text-sm text-slate-600 mb-2">Total Pesanan Diproses</p>
+            <p className="text-3xl font-bold text-blue-600">
+              {orders.filter(o => o.status === 'processing').length}
+            </p>
+          </div>
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+            <p className="text-sm text-slate-600 mb-2">Total Pesanan Selesai</p>
+            <p className="text-3xl font-bold text-green-600">
+              {orders.filter(o => o.status === 'completed').length}
+            </p>
+          </div>
         </div>
       </div>
     </AdminLayout>
