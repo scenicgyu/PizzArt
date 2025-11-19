@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Minus, Sparkles } from 'lucide-react';
 import { Pizza, Topping } from '../../types';
-import { baseSauces, crustTypes, pizzaSizes, availableToppings } from '../../data/toppings';
+import { baseSauces, crustTypes, pizzaSizes, availableToppings as defaultToppings } from '../../data/toppings';
 import PizzaPreview from './PizzaPreview';
 import { db } from '../../lib/firebase';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -34,10 +34,11 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
       console.log('Available inventory items:', inventory);
 
       const inventoryNames = new Set(inventory.map(item => item.name.toLowerCase()));
+      const inventoryMap = new Map(inventory.map(item => [item.name.toLowerCase(), item]));
 
       const toppingsFromInventory: Topping[] = [];
 
-      availableToppings.forEach(topping => {
+      defaultToppings.forEach(topping => {
         const toppingNameLower = topping.name.toLowerCase();
         const found = Array.from(inventoryNames).some(name =>
           name.includes(toppingNameLower.split(' ')[0]) ||
@@ -56,7 +57,7 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
         setAvailableToppings(toppingsFromInventory);
       } else {
         console.log('No inventory items matched, using all available toppings as fallback');
-        setAvailableToppings(availableToppings);
+        setAvailableToppings(defaultToppings);
       }
 
       const crustsFromInventory = crustTypes.filter(crust => {
@@ -90,7 +91,7 @@ const PizzaBuilder: React.FC<PizzaBuilderProps> = ({ onPizzaComplete }) => {
       }
     } catch (error) {
       console.error('Error loading inventory:', error);
-      setAvailableToppings([]);
+      setAvailableToppings(defaultToppings);
       setAvailableCrusts(crustTypes);
       setAvailableSauces(baseSauces);
       setSelectedSauce(baseSauces[0].id);

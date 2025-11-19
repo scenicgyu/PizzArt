@@ -70,10 +70,41 @@ const QRISPayment: React.FC<QRISPaymentProps> = ({
 
   const createPayment = async () => {
     try {
-      const expiryTime = new Date();
-      expiryTime.setMinutes(expiryTime.getMinutes() + 15);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-      const qrCodeURL = `https://api.midtrans.com/qris?amount=${amount}&orderId=${orderId}`;
+      if (!supabaseUrl || !supabaseAnonKey) {
+        throw new Error('Supabase configuration missing');
+      }
+
+      const midtransOrderId = `ORDER-${orderId}-${Date.now()}`;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/create-qris-payment`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${supabaseAnonKey}`,
+        },
+        body: JSON.stringify({
+          order_id: midtransOrderId,
+          gross_amount: amount,
+          customer_details: {
+            email: customerEmail,
+            first_name: customerName,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Gagal membuat pembayaran');
+      }
+
+      const result = await response.json();
+
+      console.log('QRIS Payment created:', result);
+
+      const expiryTime = new Date(result.expiry_time || new Date().getTime() + 15 * 60 * 1000);
 
       const paymentData = {
         order_id: orderId,
@@ -81,9 +112,9 @@ const QRISPayment: React.FC<QRISPaymentProps> = ({
         total_amount: amount,
         payment_status: 'pending',
         payment_method: 'qris',
-        qris_reference: qrCodeURL,
-        transaction_id: `TXN-${Date.now()}`,
-        midtrans_order_id: `ORDER-${orderId}-${Date.now()}`,
+        qris_reference: result.qr_string,
+        transaction_id: result.transaction_id,
+        midtrans_order_id: result.order_id,
         expiry_time: expiryTime.toISOString(),
         created_at: serverTimestamp(),
         updated_at: serverTimestamp(),
@@ -98,9 +129,9 @@ const QRISPayment: React.FC<QRISPaymentProps> = ({
 
       setPayment({
         id: docRef.id,
-        qr_string: qrCodeURL,
-        transaction_id: paymentData.transaction_id,
-        midtrans_order_id: paymentData.midtrans_order_id,
+        qr_string: result.qr_string,
+        transaction_id: result.transaction_id,
+        midtrans_order_id: result.order_id,
         expiry_time: expiryTime.toISOString(),
         amount: amount,
       });
